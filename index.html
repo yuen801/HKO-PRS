@@ -1,45 +1,253 @@
 <!DOCTYPE html>
 <html>
 <head>
-<meta charset="utf-8">
-<style>
-  html, body { margin:0; height:100%; background:transparent;
-    display:flex; align-items:center; justify-content:center; }
-  img { width:120px; height:120px; object-fit:contain; }
-</style>
-</head>
-<body>
-  <div id="ic"></div>
-  <script>
-    const ic = document.getElementById('ic');
-    const qs = new URLSearchParams(location.search);
-
-    // 1. 攞天氣代碼
-    async function getIconCode() {
-      if (qs.get('type') === 'weather') {
-        const d = parseInt(qs.get('d'), 10);       // ?d=0 今日 / 1 明日 / 2 後日
-        const res = await fetch('https://data.weather.gov.hk/weatherAPI/opendata/weather.php?dataType=fnd&lang=en');
-        const data = await res.json();
-        return data.weatherForecast[d].ForecastIcon; // 7日預報第 d 日
-      }
-      // 唔加參數 = 即時天氣
-      const res = await fetch('https://data.weather.gov.hk/weatherAPI/opendata/weather.php?dataType=rhrread&lang=en');
-      const data = await res.json();
-      return data.icon;
+  <meta charset="utf-8">
+  <style>
+    body {
+      margin: 0;
+      background: transparent;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      opacity: 0;
+      transition: none;
+    }
+    body.ready {
+      opacity: 1;
+    }
+    #weatherIconContainer {
+      display: flex;
+      flex-wrap: wrap;
+      justify-content: flex-start;
+      align-items: center;
+      gap: 8px;
+    }
+    img {
+      width: 60px;
+      height: 60px;
+      object-fit: contain;
+      transition: opacity 0.2s;
+    }
+    .warning-icon {
+      width: 40px;
+      height: 40px;
+    }
+    .weather-icon {
+      width: 60px;
+      height: 60px;
+      filter: contrast(250%) brightness(60%) drop-shadow(0 0 0.5px #000);
     }
 
-    // 2. 拼天文台官方圖 URL
-    (async () => {
-      try {
-        const code = await getIconCode();
-        const img = document.createElement('img');
-        img.src = `https://www.hko.gov.hk/images/HKOWxIconOutline/pic${code}.png`;
-        img.alt = 'weather';
-        ic.appendChild(img);
-      } catch (e) {
-        ic.textContent = '--';
+  </style>
+</head>
+<body>
+  <div id="weatherIconContainer"></div>
+
+  <script>
+    // 1. 定義天氣號碼對應嘅 Icon URL (對應地圖 Mapping Object)
+    const iconMap = {
+      TC1: './icons/TC1.png',
+      TC3: './icons/TC3.png',
+      TC8NE: './icons/TC8NE.png',
+      TC8SE: './icons/TC8SE.png',
+      TC8NW: './icons/TC8NW.png',
+      TC8SW: './icons/TC8SW.png',
+      TC9: './icons/TC9.png',
+      TC10: './icons/TC10.png',
+      WRAINA: './icons/WRAINA.png',
+      WRAINR: './icons/WRAINR.png',
+      WRAINB: './icons/WRAINB.png',
+      WTS: './icons/WTS.png',
+      WHOT: './icons/WHOT.png',
+      WCOLD: './icons/WCOLD.png',
+      WFROST: './icons/WFROST.png'
+    };
+
+    // 1. 讀取 URL 網址裡面的 ?type= 和 ?d= 參數
+    const urlParams = new URLSearchParams(window.location.search);
+    const type = urlParams.get('type');
+
+    let dayIndex = -1;
+    console.log(type);
+    if (type === 'weather') {
+      dayIndex = parseInt(urlParams.get('d'), 10);
+      if (isNaN(dayIndex)) {
+        console.error('Missing or invalid ?d= query parameter for type=weather');
+        document.body.classList.add('ready');
       }
-    })();
+    }
+
+    function toDataUrl(src) {
+      if (!src) {
+        return Promise.resolve('');
+      }
+
+      if (src.startsWith('data:')) {
+        return Promise.resolve(src);
+      }
+
+      const url = new URL(src, window.location.href);
+      if (url.protocol !== 'http:' && url.protocol !== 'https:') {
+        // Skip fetch for local file paths / file:// pages.
+        return Promise.resolve(src);
+      }
+
+      return fetch(src)
+        .then((response) => {
+          if (!response.ok) {
+            throw new Error(`Failed to fetch ${src}`);
+          }
+          return response.blob();
+        })
+        .then((blob) => new Promise((resolve, reject) => {
+          const reader = new FileReader();
+          reader.onloadend = () => resolve(reader.result);
+          reader.onerror = () => reject(new Error(`Failed to read ${src}`));
+          reader.readAsDataURL(blob);
+        }));
+    }
+
+    async function renderWeatherIcons(sources, type) {
+      const container = document.getElementById('weatherIconContainer');
+      container.innerHTML = '';
+
+      const imageDataUrls = await Promise.all(sources.map((src) => toDataUrl(src)));
+      const images = imageDataUrls.map((dataUrl) => {
+        const img = document.createElement('img');
+        img.src = dataUrl;
+        img.alt = 'weather icon';
+        if (type === 'warning') {
+          img.classList.add('warning-icon');
+        } else if (type === 'weather') {
+          img.classList.add('weather-icon');
+        }
+        container.appendChild(img);
+        return img;
+      });
+
+      if (images.length === 0) {
+        document.body.classList.add('ready');
+        return;
+      }
+
+      let loadedCount = 0;
+      images.forEach((img) => {
+        img.onload = () => {
+          loadedCount += 1;
+          if (loadedCount === images.length) {
+            document.body.classList.add('ready');
+          }
+        };
+        img.onerror = () => {
+          loadedCount += 1;
+          if (loadedCount === images.length) {
+            document.body.classList.add('ready');
+          }
+        };
+      });
+    }
+
+    // 2. Fetch 外來天氣 API (例如 HKO Open Data)
+    async function updateWeatherIcon() {
+      try {
+        let iconCode = '';
+
+        if (type === "weather") {
+          if (dayIndex >=0 && dayIndex < 9) { // 天氣預報
+            const res = await fetch('https://data.weather.gov.hk/weatherAPI/opendata/weather.php?dataType=fnd&lang=en');
+            
+            const data = await res.json();
+
+            console.log(dayIndex);
+            console.log(JSON.stringify(data, null, 2));
+            iconCode = data.weatherForecast[dayIndex].ForecastIcon; 
+
+            renderWeatherIcons([`./icons/pic${iconCode}.png`], 'weather');
+
+          } else if (dayIndex === -1) { // 即時天氣
+            const res = await fetch('https://data.weather.gov.hk/weatherAPI/opendata/weather.php?dataType=rhrread&lang=en');
+            const data = await res.json();
+
+            console.log(dayIndex);
+            console.log(JSON.stringify(data, null, 2));
+            iconCode = data.icon; 
+
+            renderWeatherIcons([`./icons/pic${iconCode}.png`], 'weather');
+          }
+        } else if (type === 'warning') {
+          const res = await fetch('https://data.weather.gov.hk/weatherAPI/opendata/weather.php?dataType=warnsum&lang=en');
+          
+          const data = await res.json();
+
+          console.log(dayIndex);
+          console.log(JSON.stringify(data, null, 2));
+          
+          const warningIconSources = [];
+
+          if (data.WTS) {
+            console.log(data.WTS.actionCode);
+            if (data.WTS.actionCode !== "CANCEL") {
+              warningIconSources.push('./icons/WTS.png');
+            }
+          }
+          if (data.WHOT) {
+            console.log(data.WHOT.actionCode);
+            if (data.WHOT.actionCode !== "CANCEL") {
+              warningIconSources.push('./icons/WHOT.png');
+            }
+          }
+          if (data.WCOLD) {
+            console.log(data.WCOLD.actionCode);
+            if (data.WCOLD.actionCode !== "CANCEL") {
+              warningIconSources.push('./icons/WCOLD.png');
+            }
+          }
+          if (data.WFROST) {
+            console.log(data.WFROST.actionCode);
+            if (data.WFROST.actionCode !== "CANCEL") {
+              warningIconSources.push('./icons/WFROST.png');
+            }
+          }
+          if (data.WTCSGNL) {
+            console.log(data.WTCSGNL.actionCode);
+            if (data.WTCSGNL.actionCode !== "CANCEL" || data.WTCSGNL.code !== "CANCEL") {
+              const mappedWarningIcon = iconMap[data.WTCSGNL.code];
+              if (mappedWarningIcon) {
+                warningIconSources.push(mappedWarningIcon);
+              }
+            }
+          }
+          if (data.WRAIN) {
+            console.log(data.WRAIN.actionCode);
+            if (data.WRAIN.actionCode !== "CANCEL") {
+              const mappedRainIcon = iconMap[data.WRAIN.code];
+              if (mappedRainIcon) {
+                warningIconSources.push(mappedRainIcon);
+              }
+            }
+          }
+          //warningIconSources.push('./icons/WTS.png');
+          renderWeatherIcons(warningIconSources, 'warning');
+        } else if (type === "warning_debug") { //For debugging purpose only
+          const res = await fetch('https://data.weather.gov.hk/weatherAPI/opendata/weather.php?dataType=warnsum&lang=en');
+          
+          const data = await res.json();
+
+          console.log(dayIndex);
+          console.log(JSON.stringify(data, null, 2));
+          
+          const warningIconSources = [];
+
+          warningIconSources.push('./icons/WTS.png');
+          warningIconSources.push('./icons/WHOT.png');
+          
+          renderWeatherIcons(warningIconSources, 'warning');
+        }
+      } catch (err) {
+        console.error("Fetch weather icon error:", err);
+      }
+    }
+    updateWeatherIcon();
   </script>
 </body>
 </html>
