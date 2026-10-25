@@ -14,12 +14,12 @@
     overflow:hidden;
   }
   .box { display:flex; align-items:center; gap:6%; }
-  #umbrella { width:56%; min-width:56px; }
+  #umbrella { width:52%; min-width:52px; }
   #umbrella img { width:100%; height:auto; display:block; }
   .txt { display:flex; flex-direction:column; gap:2%; }
-  #lvl { font-size:12vmin; font-weight:700; white-space:nowrap; }
-  #range { font-size:4.8vmin; color:#444444; white-space:nowrap; }
-  #err { display:none; font-size:4.8vmin; color:#b00000; }
+  #lvl { font-size:11vmin; font-weight:700; white-space:nowrap; }
+  #range { font-size:4.4vmin; color:#444444; white-space:nowrap; }
+  #err { display:none; font-size:4.4vmin; color:#b00000; }
 </style>
 </head>
 <body>
@@ -27,12 +27,15 @@
     <div id="umbrella"></div>
     <div class="txt">
       <div id="lvl">—</div>
-      <div id="range">顯著降雨概率</div>
+      <div id="range">載入中</div>
     </div>
   </div>
   <div id="err">載入失敗</div>
 <script>
 (function(){
+  var DAY = 0;
+  try { var q = new URLSearchParams(location.search).get("day"); if (q !== null) { var n = parseInt(q,10); if (!isNaN(n)) DAY = n; } } catch(e){}
+  var DAYNAME = ["今日","明日","後日","大後日"][DAY] || ("第" + (DAY+1) + "日");
   var IMG = {
     "低":"data:image/png;base64,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",
     "中低":"data:image/png;base64,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",
@@ -44,18 +47,20 @@
   fetch("https://data.weather.gov.hk/weatherAPI/opendata/weather.php?dataType=fnd&lang=tc",{cache:"no-store"})
     .then(function(r){ if(!r.ok){ throw new Error(r.status); } return r.json(); })
     .then(function(d){
-      var p = (d.weatherForecast && d.weatherForecast[0] && d.weatherForecast[0].PSR) || "";
+      var fc = d.weatherForecast || [];
+      var t = fc[DAY] || fc[0] || {};
+      var p = t.PSR || "";
       var u = document.getElementById("umbrella");
       var lvl = document.getElementById("lvl");
       var range = document.getElementById("range");
       if(IMG[p]){
         u.innerHTML = '<img src="' + IMG[p] + '" alt="">';
         lvl.textContent = p;
-        range.textContent = "顯著降雨概率 " + RANGE[p];
+        range.textContent = DAYNAME + " 顯著降雨概率 " + RANGE[p];
       } else {
         u.innerHTML = "";
         lvl.textContent = p || "—";
-        range.textContent = "顯著降雨概率";
+        range.textContent = DAYNAME + " 顯著降雨概率";
       }
     })
     .catch(function(){ document.getElementById("err").style.display = "block"; });
